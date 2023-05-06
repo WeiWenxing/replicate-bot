@@ -42,23 +42,24 @@ def run(image, mask_prompt, negative_mask_prompt, mask_precision, mask_padding=4
     def process_mask_parts(these_preds,these_prompt_parts,mode,final_img = None):
         for i in range(these_prompt_parts):
             filename = f"mask_{mode}_{i}.png"
-            plt.imsave(filename,torch.sigmoid(these_preds[i]))
+            plt.imsave(filename, torch.sigmoid(these_preds[i]))
 
             # TODO: Figure out how to convert the plot above to numpy instead of re-loading image
             img = cv2.imread(filename)
             gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             (thresh, bw_image) = cv2.threshold(gray_image, mask_precision, 255, cv2.THRESH_BINARY)
 
-            if (mode == 0): bw_image = numpy.invert(bw_image)
+            if mode == 0:
+                bw_image = numpy.invert(bw_image)
 
             # overlay mask parts
             bw_image = gray_to_pil(bw_image)
-            if (i > 0 or final_img is not None):
+            if i > 0 or final_img is not None:
                 bw_image = overlay_mask_part(bw_image,final_img,mode)
 
             final_img = bw_image
 
-            return(final_img)
+            return final_img
 
     def get_mask():
         delimiter_string = "|"
