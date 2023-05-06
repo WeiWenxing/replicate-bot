@@ -118,15 +118,18 @@ async def high(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.info(id)
         user = db.get_user(id)
         logging.info(user)
-        if user is None:
-            await message.reply_text(r'please input your replicate token as /token <apitoken>, you should sign up and get API token: https://replicate.com/account/api-tokens')
+        if not user or not user.token:
+            await message.reply_text(r'please input your replicate token as /token <apitoken>, you should sign in and get API token: https://replicate.com/account/api-tokens')
         else:
             url = await get_file_url(bot, message)
             success, output = replicate.high_op(url, user.token)
             if success:
                 await message.reply_document(output)
             else:
+                user.token = ''
+                db.update_user(user)
                 await message.reply_text(output)
+
 
 async def run():
     """
