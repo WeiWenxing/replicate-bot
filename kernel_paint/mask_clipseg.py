@@ -40,9 +40,12 @@ def overlay_mask_part(img_a,img_b,mode):
 
 def run(image, mask_prompt, negative_mask_prompt, mask_precision, mask_padding=4):
     def process_mask_parts(these_preds,these_prompt_parts,mode,final_img = None):
+        logging.info(these_prompt_parts)
         for i in range(these_prompt_parts):
             filename = f"mask_{mode}_{i}.png"
-            plt.imsave(filename, torch.sigmoid(these_preds[i]))
+            logging.info(filename)
+            sig = torch.sigmoid(these_preds[i]) if these_prompt_parts > 1 else torch.sigmoid(these_preds)
+            plt.imsave(filename, sig)
 
             # TODO: Figure out how to convert the plot above to numpy instead of re-loading image
             img = cv2.imread(filename)
@@ -59,15 +62,22 @@ def run(image, mask_prompt, negative_mask_prompt, mask_precision, mask_padding=4
 
             final_img = bw_image
 
-            return final_img
+        return final_img
 
     def get_mask():
         delimiter_string = "|"
 
         prompts = mask_prompt.split(delimiter_string)
+        logging.info(prompts)
+
         prompt_parts = len(prompts)
+        logging.info(prompt_parts)
+
         negative_prompts = negative_mask_prompt.split(delimiter_string)
+        logging.info(negative_prompts)
+
         negative_prompt_parts = len(negative_prompts)
+        logging.info(negative_prompt_parts)
 
         inputs = processor(text=prompts, images=[image] * prompt_parts, padding="max_length", return_tensors="pt")
         negative_inputs = processor(text=negative_prompts, images=[image] * negative_prompt_parts, padding="max_length", return_tensors="pt")

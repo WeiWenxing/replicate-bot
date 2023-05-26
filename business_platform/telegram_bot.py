@@ -1,5 +1,6 @@
 import logging
 import sys
+
 sys.path.append("..")
 
 import datetime
@@ -15,6 +16,8 @@ from config import telegram_config
 from kernel_paint import replicate
 from kernel_paint.user import User, Database
 from kernel_paint import mask_clipseg
+from kernel_paint import image_utils
+from kernel_paint import trans
 
 db = Database('tel.db')
 
@@ -59,6 +62,31 @@ async def down_image_to_path(bot, message):
     photo_path = await file.download_to_drive(custom_path=path)
     logging.info(photo_path)
     return str(photo_path)
+
+
+async def down_xml(bot, message):
+    logging.info("Message contains one photo.")
+    chat_id = message.from_user.id
+    message_id = message.message_id
+    path = f'download/xml_{chat_id}_{message_id}.xml'
+    logging.info(f"{path}")
+    file = await bot.getFile(message.document.file_id)
+    logging.info(file)
+    photo_path = await file.download_to_drive(custom_path=path)
+    logging.info(photo_path)
+    return str(photo_path)
+
+
+async def down_image(bot, message, is_doc=False):
+    logging.info("Message contains one photo.")
+    if not is_doc:
+        file = await bot.getFile(message.photo[-1].file_id)
+    else:
+        file = await bot.getFile(message.document.file_id)
+    logging.info(file)
+    bytes = await file.download_as_bytearray()
+    image = Image.open(BytesIO(bytes))
+    return image
 
 
 def open_image_from_path(photo_path):
@@ -185,7 +213,7 @@ async def trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             mask_l = mask.convert("L")
             mask_array = np.array(mask_l)
-            mask_array = np.invert(mask_array)#np.logical_not(mask).astype(np.uint8)
+            mask_array = np.invert(mask_array)  # np.logical_not(mask).astype(np.uint8)
             mask_invert = Image.fromarray(mask_array)
             merge = Image.composite(image, Image.new("RGB", image.size, "black"), mask_invert)
             merge_name = f'download/merge_{date}'
@@ -195,15 +223,116 @@ async def trip(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prompt = r'(8k, RAW photo, best quality, masterpiece:1.2), 3d, (realistic, photo-realistic:1.37), fmasterpiecel, 1girl, extremely delicate facial, perfect female figure, (absolutely nude:1.6), smooth fair skin, procelain skin, lustrous skin, clavicle, cleavage, slim waist, very short hair, arms in back, an extremely delicate and beautiful, extremely detailed,intricate,'
             prompt_negative = r'(worst quality:2), (low quality:2), (normal quality:2), lowres, ((monochrome)), ((grayscale)), easynegative, badhandsv5, skin spots, acnes, skin blemishes, tattoo, body painting, age spot, (ugly:1.331), (duplicate:1.331), (morbid:1.21), (mutilated:1.21), (tranny:1.331), deformed eyes, deformed lips, mutated hands, (poorly drawn hands:1.331), blurry, (bad anatomy:1.21), (bad proportions:1.331), three arms, extra limbs, extra legs, extra arms, extra hands, (more than 2 nipples:1.331), (missing arms:1.331), (extra legs:1.331), (fused fingers:1.61051), (too many fingers:1.61051), (unclear eyes:1.331), bad hands, missing fingers, extra digit, (futa:1.1), bad body, pubic hair, glans, easynegative, three feet, four feet, (bra:1.3), (saggy breasts:1.3)'
 
-            success, output = replicate.nude_op(token=user.token, image=url, mask=mask_path, prompt=prompt, negative_prompt=prompt_negative)
-            if success:
-                for img in output:
-                    await message.reply_document(img)
-                # await message.reply_text(output)
-            else:
-                user.token = ''
-                db.update_user(user)
-                await message.reply_text(output)
+            # success, token_is_good, output = replicate.nude_op(token=user.token, image=url, mask=mask_path, prompt=prompt, negative_prompt=prompt_negative)
+            # if success:
+            #     for img in output:
+            #         await message.reply_document(img)
+            #     # await message.reply_text(output)
+            # elif token_is_good:
+            #     await message.reply_text("generate failed, please retry")
+            # else:
+            #     user.token = ''
+            #     db.update_user(user)
+            #     await message.reply_text(output)
+
+
+async def show_mask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    bot = context.bot
+    if message.photo:
+        id = str(message.from_user.id)
+        user = db.get_user(id)
+        if not user or not user.token:
+            await message.reply_text(f'please input your replicate token as: /token <apitoken>。\n  You should sign in and get API token: https://replicate.com/account/api-tokens')
+        else:
+            logging.info(message)
+            strs = message.caption.split()
+            logging.info(strs)
+            if len(strs) < 2:
+                await message.reply_text(r'please input at least 2 words')
+                return
+
+            mask_str = strs[1]
+            neg_mask_str = strs[2] if len(strs) > 2 else ""
+            url = await get_file_url(bot, message)
+            image_path = await down_image_to_path(bot, message)
+            image = open_image_from_path(image_path)
+            logging.info(mask_str)
+            logging.info(neg_mask_str)
+            mask = mask_clipseg.run(image, mask_str, neg_mask_str, mask_precision=100, mask_padding=4)
+
+            date = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S_%f')
+            mask_name = f'download/mask_{date}'
+            mask_path = save_image(mask, mask_name, mode='PNG')
+            logging.info(mask_path)
+
+            await message.reply_photo(mask_path)
+            import numpy as np
+
+            mask_l = mask.convert("L")
+            mask_array = np.array(mask_l)
+            mask_array = np.invert(mask_array)  # np.logical_not(mask).astype(np.uint8)
+            mask_invert = Image.fromarray(mask_array)
+            merge = Image.composite(image, Image.new("RGB", image.size, "black"), mask_invert)
+            merge_name = f'download/merge_{date}'
+            merge_path = save_image(merge, merge_name, quality=90, mode='JPEG')
+            await message.reply_photo(merge_path)
+
+
+async def show_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    bot = context.bot
+    if message.photo:
+        id = str(message.from_user.id)
+        user = db.get_user(id)
+        if not user or not user.token:
+            await message.reply_text(f'please input your replicate token as: /token <apitoken>。\n  You should sign in and get API token: https://replicate.com/account/api-tokens')
+        else:
+
+            image = await down_image(bot, message)
+            # await message.reply_photo(image_utils.byte_of_image(image))
+
+            input, eccv16, siggraph17 = image_utils.color_img(image)
+
+            await message.reply_photo(image_utils.byte_of_image(input))
+            await message.reply_photo(image_utils.byte_of_image(eccv16))
+            await message.reply_photo(image_utils.byte_of_image(siggraph17))
+
+
+async def show_grey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    bot = context.bot
+    if message.photo:
+        id = str(message.from_user.id)
+        user = db.get_user(id)
+        if not user or not user.token:
+            await message.reply_text(f'please input your replicate token as: /token <apitoken>。\n  You should sign in and get API token: https://replicate.com/account/api-tokens')
+        else:
+
+            image = await down_image(bot, message)
+            # await message.reply_photo(image_utils.byte_of_image(image))
+
+            grey = image_utils.grey_img(image)
+
+            await message.reply_photo(image_utils.byte_of_image(grey))
+
+
+async def trans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    bot = context.bot
+    if message.photo:
+        id = str(message.from_user.id)
+        user = db.get_user(id)
+        if not user or not user.token:
+            await message.reply_text(f'please input your replicate token as: /token <apitoken>。\n  You should sign in and get API token: https://replicate.com/account/api-tokens')
+        else:
+            input_xml = await down_xml(bot, message)
+            # await message.reply_photo(image_utils.byte_of_image(image))
+            dest = "zh-CN"
+            output_xml = input_xml.replace('.xml', f'_{dest}.xml')
+            out = trans.translate_file(input_xml, output_xml, dest)
+
+            await message.reply_document(out)
 
 
 async def run():
@@ -228,8 +357,13 @@ async def run():
     # application.add_handler(MessageHandler(filters.PHOTO & ~filters.CaptionRegex('dress|bg|mi|hand|lace|up|lower|ext|rep|high|clip|all'), self.trip))
     application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('hh'), high))
     application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('tt'), trip))
+    application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('mm'), show_mask))
+    application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('color'), show_color))
+    application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('grey'), show_grey))
 
-    #application.add_error_handler(self.error_handler)
+    application.add_handler(MessageHandler(filters.Document.FileExtension(".xml"), trans))
+
+    # application.add_error_handler(self.error_handler)
 
     # application.run_polling()
     await application.initialize()
@@ -243,4 +377,3 @@ async def start_task():
     以异步方式启动
     """
     return await run()
-

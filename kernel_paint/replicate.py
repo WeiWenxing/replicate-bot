@@ -27,7 +27,7 @@ def nude_op(token, image, mask, prompt, negative_prompt, num_outputs=1, num_infe
     try:
         client = Client(api_token=token)
         output = client.run(
-            "andreasjansson/stable-diffusion-inpainting:e490d072a34a94a11e9711ed5a6ba621c3fab884eda1665d9d3a282d65a21180",
+            "stability-ai/stable-diffusion-inpainting:c28b92a7ecd66eee4aefcd8a94eb9e7f6c3805d5f06038165407fb5cb355ba67",
             input={"image": image,
                    "mask":open(mask, "rb"),
                    "prompt": prompt,
@@ -37,12 +37,16 @@ def nude_op(token, image, mask, prompt, negative_prompt, num_outputs=1, num_infe
                    },
         )
         success = True
+        token_is_good = True
     except replicate.exceptions.ReplicateError as e:
         success = False
+        token_is_good = False
         output = str(e)
-    except:
+    except Exception as e:
         success = False
+        token_is_good = True
         output = r'please input your replicate token as /token <apitoken>, you should sign up and get API token: https://replicate.com/account/api-tokens'
+        output = str(e)
 
     logging.info(output)
-    return success, output
+    return success, token_is_good, output

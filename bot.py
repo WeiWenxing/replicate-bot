@@ -21,7 +21,7 @@ def main():
     loop = asyncio.get_event_loop()
 
     tasks = [
-        discord_bot.start_task(),
+        # discord_bot.start_task(),
         telegram_bot.start_task(),
     ]
     try:
