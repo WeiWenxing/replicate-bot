@@ -317,10 +317,11 @@ async def show_grey(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_photo(image_utils.byte_of_image(grey))
 
 
-async def trans(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def translate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     bot = context.bot
-    if message.photo:
+    logging.info(message)
+    if message.document:
         id = str(message.from_user.id)
         user = db.get_user(id)
         if not user or not user.token:
@@ -329,8 +330,10 @@ async def trans(update: Update, context: ContextTypes.DEFAULT_TYPE):
             input_xml = await down_xml(bot, message)
             # await message.reply_photo(image_utils.byte_of_image(image))
             dest = "zh-CN"
+            logging.info(input_xml)
             output_xml = input_xml.replace('.xml', f'_{dest}.xml')
-            out = trans.translate_file(input_xml, output_xml, dest)
+            logging.info(output_xml)
+            out = trans.translate_xml(input_xml, output_xml, dest)
 
             await message.reply_document(out)
 
@@ -361,9 +364,11 @@ async def run():
     application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('color'), show_color))
     application.add_handler(MessageHandler(filters.PHOTO & filters.CaptionRegex('grey'), show_grey))
 
-    application.add_handler(MessageHandler(filters.Document.FileExtension(".xml"), trans))
+    # application.add_handler(MessageHandler(filters.Document.FileExtension(".xml"), trans))
+    application.add_handler(MessageHandler(filters.Document.MimeType('application/xml'), translate))
 
-    # application.add_error_handler(self.error_handler)
+
+# application.add_error_handler(self.error_handler)
 
     # application.run_polling()
     await application.initialize()
